@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TIOBE 编程语言排行榜</title>
+    <script src="/js/jquery.min.js"></script>
+    <script src="/js/echarts.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        header {
+            text-align: center;
+            padding: 40px 0;
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            margin-bottom: 30px;
+        }
+        header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        header p { color: #888; font-size: 1.1em; }
+        .date-picker {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+        }
+        .date-picker label { color: #aaa; }
+        .date-picker select {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            font-size: 1em;
+            cursor: pointer;
+        }
+        .date-picker select option { background: #1a1a2e; color: #fff; }
+        .date-picker button {
+            padding: 10px 25px;
+            border-radius: 8px;
+            border: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            font-size: 1em;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .date-picker button:hover { transform: scale(1.05); }
+        .main-content { display: flex; gap: 30px; flex-wrap: wrap; }
+        .chart-section {
+            flex: 1;
+            min-width: 500px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 20px;
+        }
+        #chart { width: 100%; height: 500px; }
+        .table-section {
+            flex: 1;
+            min-width: 400px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        th { background: rgba(255,255,255,0.1); position: sticky; top: 0; z-index: 10; }
+        tbody tr:hover { background: rgba(255,255,255,0.05); cursor: pointer; }
+        .rank { font-weight: bold; color: #ffd700; }
+        .positive { color: #4ade80; }
+        .negative { color: #f87171; }
+        
+        /* Loading 遮罩 */
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(26, 26, 46, 0.95);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        .loading-overlay.hidden { display: none; }
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { margin-top: 20px; color: #888; font-size: 1.1em; }
+        
+        .detail-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .detail-content {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 90%;
+            position: relative;
+        }
+        .close-btn {
+            position: absolute;
+            top: 15px; right: 20px;
+            font-size: 30px;
+            cursor: pointer;
+            color: #888;
+        }
+        .close-btn:hover { color: #fff; }
+        .detail-header { margin-bottom: 30px; }
+        .detail-header h2 { font-size: 2em; margin-bottom: 10px; }
+        .detail-stats { display: flex; gap: 20px; margin-bottom: 20px; }
+        .stat-item {
+            background: rgba(255,255,255,0.1);
+            padding: 15px 25px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-label { font-size: 0.9em; color: #888; }
+        .stat-value { font-size: 1.5em; font-weight: bold; }
+        .detail-section { margin-bottom: 20px; }
+        .detail-section h3 { margin-bottom: 10px; color: #60a5fa; }
+        .tag-list { display: flex; flex-wrap: wrap; gap: 10px; }
+        .tag {
+            background: rgba(96, 165, 250, 0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        .no-data {
+            text-align: center;
+            padding: 50px;
+            color: #888;
+        }
+        @media (max-width: 900px) {
+            .main-content { flex-direction: column; }
+            .chart-section, .table-section { min-width: 100%; }
+            .date-picker { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading 遮罩 -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text">正在加载 TIOBE 数据...</div>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>🏆 TIOBE 编程语言排行榜</h1>
+            <p id="dateDisplay">实时数据展示</p>
+            <div class="date-picker">
+                <label>选择时间：</label>
+                <select id="yearSelect"></select>
+                <select id="monthSelect"></select>
+                <button onclick="loadDataByDate()">查询</button>
+            </div>
+        </header>
+        <div class="main-content">
+            <div class="chart-section">
+                <h2>📊 排名分布图</h2>
+                <div id="chart"></div>
+            </div>
+            <div class="table-section">
+                <h2>📋 排行榜详情</h2>
+                <table id="rankTable">
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>语言</th>
+                            <th>份额</th>
+                            <th>变化</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="detail-modal" id="detailModal">
+        <div class="detail-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <div class="detail-header">
+                <h2 id="detailName"></h2>
+                <p id="detailDesc"></p>
+            </div>
+            <div class="detail-stats">
+                <div class="stat-item">
+                    <div class="stat-label">当前排名</div>
+                    <div class="stat-value" id="detailRank"></div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">市场份额</div>
+                    <div class="stat-value" id="detailRating"></div>
+                </div>
+            </div>
+            <div class="detail-section">
+                <h3>🎯 主要用途</h3>
+                <div class="tag-list" id="useCases"></div>
+            </div>
+            <div class="detail-section">
+                <h3>🛠️ 相关框架/工具</h3>
+                <div class="tag-list" id="frameworks"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let chart;
+        let languagesData = [];
+        const currentDate = new Date();
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth() + 1;
+
+        $(document).ready(function() {
+            chart = echarts.init(document.getElementById('chart'));
+            initDatePicker();
+            loadData();
+            window.addEventListener('resize', () => chart.resize());
+        });
+
+        function initDatePicker() {
+            const yearSelect = $('#yearSelect');
+            const monthSelect = $('#monthSelect');
+            
+            // TIOBE 数据从 2001 年开始
+            for (let y = currentYear; y >= 2001; y--) {
+                yearSelect.append(`<option value="${y}">${y}年</option>`);
+            }
+            
+            for (let m = 1; m <= 12; m++) {
+                monthSelect.append(`<option value="${m}">${m}月</option>`);
+            }
+            
+            yearSelect.val(currentYear);
+            monthSelect.val(currentMonth);
+            
+            // 年份变化时，限制月份
+            yearSelect.on('change', function() {
+                updateMonthOptions();
+            });
+        }
+
+        function updateMonthOptions() {
+            const selectedYear = parseInt($('#yearSelect').val());
+            const monthSelect = $('#monthSelect');
+            const selectedMonth = parseInt(monthSelect.val());
+            
+            monthSelect.find('option').each(function() {
+                const month = parseInt($(this).val());
+                if (selectedYear === currentYear && month > currentMonth) {
+                    $(this).prop('disabled', true);
+                } else {
+                    $(this).prop('disabled', false);
+                }
+            });
+            
+            // 如果当前选中的月份被禁用，选择最近可用的月份
+            if (selectedYear === currentYear && selectedMonth > currentMonth) {
+                monthSelect.val(currentMonth);
+            }
+        }
+
+        function showLoading() {
+            $('#loadingOverlay').removeClass('hidden');
+        }
+
+        function hideLoading() {
+            $('#loadingOverlay').addClass('hidden');
+        }
+
+        function loadData() {
+            showLoading();
+            $.get('/api/languages', function(data) {
+                languagesData = data;
+                renderTable(data);
+                renderChart(data);
+                $('#dateDisplay').text(`${currentYear}年${currentMonth}月 - 实时数据展示`);
+            }).fail(function() {
+                renderNoData();
+            }).always(function() {
+                hideLoading();
+            });
+        }
+
+        function loadDataByDate() {
+            const year = $('#yearSelect').val();
+            const month = $('#monthSelect').val();
+            
+            // 验证不能选择未来时间
+            const selectedDate = new Date(year, month - 1);
+            const now = new Date(currentYear, currentMonth - 1);
+            
+            if (selectedDate > now) {
+                alert('不能选择未来时间！');
+                return;
+            }
+            
+            showLoading();
+            $.get(`/api/languages?year=${year}&month=${month}`, function(data) {
+                languagesData = data;
+                renderTable(data);
+                renderChart(data);
+                $('#dateDisplay').text(`${year}年${month}月 - 历史数据`);
+            }).fail(function() {
+                renderNoData();
+            }).always(function() {
+                hideLoading();
+            });
+        }
+
+        function renderNoData() {
+            $('#tableBody').html('<tr><td colspan="4" class="no-data">暂无数据，请稍后重试</td></tr>');
+            chart.clear();
+        }
+
+        function renderTable(data) {
+            if (!data || data.length === 0) {
+                renderNoData();
+                return;
+            }
+            let html = '';
+            data.forEach(lang => {
+                const changeClass = lang.change.startsWith('+') ? 'positive' : 
+                                   lang.change.startsWith('-') ? 'negative' : '';
+                html += `
+                    <tr onclick="showDetail('${lang.name.replace(/'/g, "\\'")}')">
+                        <td class="rank">#${lang.rank}</td>
+                        <td>${lang.name}</td>
+                        <td>${lang.rating}</td>
+                        <td class="${changeClass}">${lang.change}</td>
+                    </tr>
+                `;
+            });
+            $('#tableBody').html(html);
+        }
+
+        function renderChart(data) {
+            if (!data || data.length === 0) {
+                chart.clear();
+                return;
+            }
+            const top10 = data.slice(0, 10);
+            const option = {
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: {
+                    type: 'value',
+                    axisLabel: { color: '#888', formatter: '{value}%' }
+                },
+                yAxis: {
+                    type: 'category',
+                    data: top10.map(l => l.name).reverse(),
+                    axisLabel: { color: '#fff' }
+                },
+                series: [{
+                    type: 'bar',
+                    data: top10.map(l => parseFloat(l.rating)).reverse(),
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                            { offset: 0, color: '#667eea' },
+                            { offset: 1, color: '#764ba2' }
+                        ]),
+                        borderRadius: [0, 8, 8, 0]
+                    },
+                    label: {
+                        show: true,
+                        position: 'right',
+                        formatter: '{c}%',
+                        color: '#fff'
+                    }
+                }]
+            };
+            chart.setOption(option, true);
+            chart.off('click');
+            chart.on('click', function(params) {
+                showDetail(params.name);
+            });
+        }
+
+        function showDetail(name) {
+            const year = $('#yearSelect').val();
+            const month = $('#monthSelect').val();
+            $.get(`/api/language/${encodeURIComponent(name)}?year=${year}&month=${month}`, function(data) {
+                $('#detailName').text(data.name);
+                $('#detailDesc').text(data.description);
+                $('#detailRank').text('#' + data.rank);
+                $('#detailRating').text(data.rating);
+                
+                let useCasesHtml = data.use_cases.map(u => `<span class="tag">${u}</span>`).join('');
+                $('#useCases').html(useCasesHtml || '<span class="tag">暂无数据</span>');
+                
+                let frameworksHtml = data.frameworks.map(f => `<span class="tag">${f}</span>`).join('');
+                $('#frameworks').html(frameworksHtml || '<span class="tag">暂无数据</span>');
+                
+                $('#detailModal').css('display', 'flex');
+            });
+        }
+
+        function closeModal() {
+            $('#detailModal').hide();
+        }
+
+        $(document).on('click', '#detailModal', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        $(document).on('keydown', function(e) {
+            if (e.key === 'Escape') closeModal();
+        });
+    </script>
+</body>
+</html>
